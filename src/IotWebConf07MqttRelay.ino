@@ -1,7 +1,7 @@
 /**
  * IotWebConf07MqttRelay.ino -- IotWebConf is an ESP8266/ESP32
  *   non blocking WiFi/AP web configuration library for Arduino.
- *   https://github.com/prampec/IotWebConf 
+ *   https://github.com/prampec/IotWebConf
  *
  * Copyright (C) 2020 Balazs Kelemen <prampec+arduino@gmail.com>
  *
@@ -14,11 +14,11 @@
  * Description:
  *   All IotWebConf specific aspects of this example are described in
  *   previous examples, so please get familiar with IotWebConf before
- *   starting this example. So nothing new will be explained here, 
+ *   starting this example. So nothing new will be explained here,
  *   but a complete demo application will be built.
  *   It is also expected from the reader to have a basic knowledge over
  *   MQTT to understand this code.
- *   
+ *
  *   This example starts an MQTT client with the configured
  *   connection settings.
  *   Will receives messages appears in channel "/devices/[thingName]/action"
@@ -28,14 +28,14 @@
  *   corresponding to the received action. The relay can be also controlled
  *   by the push button.
  *   The thing will delay actions arriving within 7 seconds.
- *   
+ *
  *   This example also provides the firmware update option.
  *   (See previous examples for more details!)
- * 
+ *
  * Software setup for this example:
  *   This example utilizes Joel Gaehwiler's MQTT library.
  *   https://github.com/256dpi/arduino-mqtt
- * 
+ *
  * Hardware setup for this example:
  *   - A Relay is attached to the D5 pin (On=HIGH). Note on relay pin!
  *   - An LED is attached to LED_BUILTIN pin with setup On=LOW.
@@ -124,7 +124,7 @@ unsigned long lastAction = 0;
 char mqttActionTopic[STRING_LEN];
 char mqttStatusTopic[STRING_LEN];
 
-void setup() 
+void setup()
 {
   Serial.begin(115200); // See "Note on relay pin"!
   Serial.println();
