@@ -72,19 +72,33 @@ const char wifiInitialApPassword[] = "smrtTHNG8266";
 #define CHECKBOX_LEN 9
 
 // -- Configuration specific key. The value should be modified if config structure was changed.
-#define CONFIG_VERSION "mqt2"
+#define CONFIG_VERSION "mqt4"
 
 // -- When BUTTON_PIN is pulled to ground on startup, the Thing will use the initial
 //      password to buld an AP. (E.g. in case of lost password)
-#define BUTTON_PIN D2
+#if BUTTON_PIN == -1
+# undef BUTTON_PIN
+#else
+# ifndef BUTTON_PIN
+#  define BUTTON_PIN D2
+# endif
+#endif
 
 // -- Status indicator pin.
 //      First it will light up (kept LOW), on Wifi connection it will blink,
 //      when connected to the Wifi it will turn off (kept HIGH).
-#define STATUS_PIN LED_BUILTIN
+#if STATUS_PIN == -1
+# undef STATUS_PIN
+#else
+# ifndef STATUS_PIN
+#  define STATUS_PIN LED_BUILTIN
+# endif
+#endif
 
 // -- Connected output pin. See "Note on relay pin"!
-#define RELAY_PIN D5
+#ifndef RELAY_PIN
+# define RELAY_PIN D5
+#endif
 
 #define MQTT_TOPIC_PREFIX "/devices/"
 #define MQTT_CONNECT_FREQ_LIMIT 2000
@@ -176,6 +190,9 @@ void setup()
   mqttParamGroup.addItem(&mqttRetainParam);
   mqttParamGroup.addItem(&mqttQoSParam);
 
+#ifdef SKIP_AP_STARTUP
+  iotWebConf.skipApStartup();
+#endif
   iotWebConf.setConfigSavedCallback(&configSaved);
   iotWebConf.setFormValidator(&formValidator);
   iotWebConf.setWifiConnectionCallback(&wifiConnected);
