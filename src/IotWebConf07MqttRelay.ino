@@ -344,6 +344,8 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
 }
 
 bool connectMqtt() {
+  char helloBuf[STRING_LEN];
+
   if (!mqttClient.connect(iotWebConf.getThingName(),
                           mqttUserValue[0] ? mqttUserValue : nullptr,
                           mqttPasswordValue[0] ? mqttPasswordValue : nullptr))
@@ -351,8 +353,16 @@ bool connectMqtt() {
     return false;
   }
   Serial.println("Connected!");
-
   mqttClient.subscribe(mqttActionTopic);
+  snprintf(
+    helloBuf, sizeof(helloBuf),
+    "HELLO ip=%s flash=%d QoS=%d retain=%s",
+    WiFi.localIP().toString().c_str(),
+    flashDuration,
+    mqttQoS,
+    mqttRetain ? "true": "false"
+  );
+  mqttClient.publish(mqttStatusTopic, helloBuf);
   report();
   return true;
 }
