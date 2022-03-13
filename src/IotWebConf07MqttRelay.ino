@@ -97,6 +97,9 @@ const char wifiInitialApPassword[] = "smrtTHNG8266";
 void handleRoot();
 void mqttMessageReceived(String &topic, String &payload);
 bool connectMqtt();
+void setState(int newState);
+void report();
+
 // -- Callback methods.
 void wifiConnected();
 void configSaved();
@@ -205,7 +208,14 @@ void setup()
   Serial.println("Ready.");
 }
 
-void loop() 
+void report() {
+  mqttClient.publish(mqttStatusTopic, state == HIGH ? "ON" : "OFF", mqttRetain, mqttQoS);
+#ifdef PUBLISH_ON_ACTION_TOPIC
+  mqttClient.publish(mqttActionTopic, state == HIGH ? "ON" : "OFF", retain, qos);
+#endif
+}
+
+void loop()
 {
   unsigned long now;
 
@@ -247,6 +257,12 @@ void loop()
     && ( ACTION_FREQ_LIMIT < now - lastAction))
   {
     state = needAction;
+    lastAction = now;
+  }
+}
+
+void setState(int newState) {
+    state = newState;
     digitalWrite(RELAY_PIN, state);
     if (state == HIGH)
     {
@@ -256,13 +272,10 @@ void loop()
     {
       iotWebConf.stopCustomBlink();
     }
-    mqttClient.publish(mqttStatusTopic, state == HIGH ? "ON" : "OFF", mqttRetain, mqttQoS);
-    mqttClient.publish(mqttActionTopic, state == HIGH ? "ON" : "OFF", mqttRetain, mqttQoS);
     Serial.print("Switched ");
     Serial.println(state == HIGH ? "ON" : "OFF");
     needAction = NO_ACTION;
-    lastAction = now;
-  }
+    report();
 }
 
 /**
@@ -340,9 +353,7 @@ bool connectMqtt() {
   Serial.println("Connected!");
 
   mqttClient.subscribe(mqttActionTopic);
-  mqttClient.publish(mqttStatusTopic, state == HIGH ? "ON" : "OFF", mqttRetain, mqttQoS);
-  mqttClient.publish(mqttActionTopic, state == HIGH ? "ON" : "OFF", mqttRetain, mqttQoS);
-
+  report();
   return true;
 }
 
