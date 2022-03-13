@@ -87,6 +87,7 @@ const char wifiInitialApPassword[] = "smrtTHNG8266";
 #define RELAY_PIN D5
 
 #define MQTT_TOPIC_PREFIX "/devices/"
+#define MQTT_CONNECT_FREQ_LIMIT 2000
 
 // -- Ignore/limit status changes more frequent than the value below (milliseconds).
 #define ACTION_FREQ_LIMIT 7000
@@ -206,21 +207,22 @@ void setup()
 
 void loop() 
 {
+  unsigned long now;
+
   // -- doLoop should be called as frequently as possible.
   iotWebConf.doLoop();
   mqttClient.loop();
-  
-  if (needMqttConnect)
+
+  now = millis();
+  if ((needMqttConnect
+       || (iotWebConf.getState() == iotwebconf::OnLine
+           && !mqttClient.connected()))
+      && now - lastMqttConnectionAttempt > MQTT_CONNECT_FREQ_LIMIT)
   {
-    if (connectMqtt())
-    {
-      needMqttConnect = false;
-    }
-  }
-  else if ((iotWebConf.getState() == iotwebconf::OnLine) && (!mqttClient.connected()))
-  {
+    lastMqttConnectionAttempt = now;
     Serial.println("MQTT reconnect");
-    connectMqtt();
+    if (connectMqtt())
+      needMqttConnect = false;
   }
 
   if (needReset)
@@ -230,7 +232,7 @@ void loop()
     ESP.restart();
   }
 
-  unsigned long now = millis();
+  now = millis();
 
 #ifdef BUTTON_PIN
   // -- Check for button push
@@ -329,17 +331,10 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
 }
 
 bool connectMqtt() {
-  unsigned long now = millis();
-  if (1000 > now - lastMqttConnectionAttempt)
-  {
-    // Do not repeat within 1 sec.
-    return false;
-  }
-  Serial.println("Connecting to MQTT server...");
   if (!mqttClient.connect(iotWebConf.getThingName(),
                           mqttUserValue[0] ? mqttUserValue : nullptr,
-                          mqttPasswordValue[0] ? mqttPasswordValue : nullptr)) {
-    lastMqttConnectionAttempt = now;
+                          mqttPasswordValue[0] ? mqttPasswordValue : nullptr))
+  {
     return false;
   }
   Serial.println("Connected!");
