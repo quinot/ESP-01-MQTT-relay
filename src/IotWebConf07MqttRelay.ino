@@ -132,9 +132,13 @@ void setup()
 
   pinMode(RELAY_PIN, OUTPUT);
 
+#ifdef STATUS_PIN
   iotWebConf.setStatusPin(STATUS_PIN);
+#endif
+#ifdef BUTTON_PIN
   iotWebConf.setConfigPin(BUTTON_PIN);
   iotWebConf.addSystemParameter(&mqttServerParam);
+#endif
   iotWebConf.setConfigSavedCallback(&configSaved);
   iotWebConf.setFormValidator(&formValidator);
   iotWebConf.setWifiConnectionCallback(&wifiConnected);
@@ -198,13 +202,15 @@ void loop()
 
   unsigned long now = millis();
 
+#ifdef BUTTON_PIN
   // -- Check for button push
   if ((digitalRead(BUTTON_PIN) == LOW)
     && ( ACTION_FEQ_LIMIT < now - lastAction))
   {
     needAction = 1 - state; // -- Invert the state
   }
-  
+#endif
+
   if ((needAction != NO_ACTION)
     && ( ACTION_FEQ_LIMIT < now - lastAction))
   {
