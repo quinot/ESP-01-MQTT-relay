@@ -89,7 +89,7 @@ const char wifiInitialApPassword[] = "smrtTHNG8266";
 #define MQTT_TOPIC_PREFIX "/devices/"
 
 // -- Ignore/limit status changes more frequent than the value below (milliseconds).
-#define ACTION_FEQ_LIMIT 7000
+#define ACTION_FREQ_LIMIT 7000
 #define NO_ACTION -1
 
 // -- Method declarations.
@@ -235,14 +235,14 @@ void loop()
 #ifdef BUTTON_PIN
   // -- Check for button push
   if ((digitalRead(BUTTON_PIN) == LOW)
-    && ( ACTION_FEQ_LIMIT < now - lastAction))
+    && ( ACTION_FREQ_LIMIT < now - lastAction))
   {
     needAction = 1 - state; // -- Invert the state
   }
 #endif
 
   if ((needAction != NO_ACTION)
-    && ( ACTION_FEQ_LIMIT < now - lastAction))
+    && ( ACTION_FREQ_LIMIT < now - lastAction))
   {
     state = needAction;
     digitalWrite(RELAY_PIN, state);
