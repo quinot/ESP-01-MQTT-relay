@@ -68,6 +68,8 @@ const char thingName[] = "testThing";
 const char wifiInitialApPassword[] = "smrtTHNG8266";
 
 #define STRING_LEN 128
+#define NUMBER_LEN 16
+#define CHECKBOX_LEN 9
 
 // -- Configuration specific key. The value should be modified if config structure was changed.
 #define CONFIG_VERSION "mqt2"
@@ -110,10 +112,23 @@ WiFiClient net;
 MQTTClient mqttClient;
 
 char mqttServerValue[STRING_LEN];
+char mqttUserValue[STRING_LEN];
+char mqttPasswordValue[STRING_LEN];
+char mqttRetainValue[CHECKBOX_LEN];
+char mqttQoSValue[NUMBER_LEN];
+
+static char qosValues[][NUMBER_LEN] = {"0", "1", "2"};
+static char qosNames[][STRING_LEN] = {"0 - At most once", "1 - At least once", "2 - Exactly once"};
 
 IotWebConf iotWebConf(thingName, &dnsServer, &server, wifiInitialApPassword, CONFIG_VERSION);
-// -- You can also use namespace formats e.g.: iotwebconf::TextParameter
-IotWebConfTextParameter mqttServerParam = IotWebConfTextParameter("MQTT server", "mqttServer", mqttServerValue, STRING_LEN);
+
+IotWebConfParameterGroup mqttParamGroup = IotWebConfParameterGroup("iwcMqtt", "MQTT");
+
+IotWebConfTextParameter mqttServerParam = IotWebConfTextParameter("Server", "mqttServer", mqttServerValue, STRING_LEN);
+IotWebConfTextParameter mqttUserParam = IotWebConfTextParameter("User", "mqttUser", mqttUserValue, STRING_LEN);
+IotWebConfPasswordParameter mqttPasswordParam = IotWebConfPasswordParameter("Password", "mqttPassword", mqttPasswordValue, STRING_LEN);
+IotWebConfCheckboxParameter mqttRetainParam = IotWebConfCheckboxParameter("Retain", "mqttRetain", mqttRetainValue, CHECKBOX_LEN, true);
+IotWebConfSelectParameter mqttQoSParam = IotWebConfSelectParameter("QoS", "mqttQoS", mqttQoSValue, NUMBER_LEN, (char*)qosValues, (char*)qosNames, sizeof(qosValues)/NUMBER_LEN, STRING_LEN, "1");
 
 bool needMqttConnect = false;
 bool needReset = false;
@@ -123,6 +138,8 @@ int state = LOW;
 unsigned long lastAction = 0;
 char mqttActionTopic[STRING_LEN];
 char mqttStatusTopic[STRING_LEN];
+bool mqttRetain;
+int mqttQoS;
 
 void setup()
 {
@@ -137,8 +154,14 @@ void setup()
 #endif
 #ifdef BUTTON_PIN
   iotWebConf.setConfigPin(BUTTON_PIN);
-  iotWebConf.addSystemParameter(&mqttServerParam);
 #endif
+  iotWebConf.addParameterGroup(&mqttParamGroup);
+  mqttParamGroup.addItem(&mqttServerParam);
+  mqttParamGroup.addItem(&mqttUserParam);
+  mqttParamGroup.addItem(&mqttPasswordParam);
+  mqttParamGroup.addItem(&mqttRetainParam);
+  mqttParamGroup.addItem(&mqttQoSParam);
+
   iotWebConf.setConfigSavedCallback(&configSaved);
   iotWebConf.setFormValidator(&formValidator);
   iotWebConf.setWifiConnectionCallback(&wifiConnected);
@@ -151,6 +174,10 @@ void setup()
   if (!validConfig)
   {
     mqttServerValue[0] = '\0';
+    mqttUserValue[0] = '\0';
+    mqttPasswordValue[0] = '\0';
+    mqttRetainValue[0] = '\0';
+    mqttQoSValue[0] = '\0';
   }
 
   // -- Set up required URL handlers on the web server.
@@ -167,6 +194,9 @@ void setup()
   temp += iotWebConf.getThingName();
   temp += "/status";
   temp.toCharArray(mqttStatusTopic, STRING_LEN);
+
+  mqttRetain = !strcmp(mqttRetainValue, "selected");
+  mqttQoS = atoi(mqttQoSValue);
 
   mqttClient.begin(mqttServerValue, net);
   mqttClient.onMessage(mqttMessageReceived);
@@ -224,8 +254,8 @@ void loop()
     {
       iotWebConf.stopCustomBlink();
     }
-    mqttClient.publish(mqttStatusTopic, state == HIGH ? "ON" : "OFF", true, 1);
-    mqttClient.publish(mqttActionTopic, state == HIGH ? "ON" : "OFF", true, 1);
+    mqttClient.publish(mqttStatusTopic, state == HIGH ? "ON" : "OFF", mqttRetain, mqttQoS);
+    mqttClient.publish(mqttActionTopic, state == HIGH ? "ON" : "OFF", mqttRetain, mqttQoS);
     Serial.print("Switched ");
     Serial.println(state == HIGH ? "ON" : "OFF");
     needAction = NO_ACTION;
@@ -269,6 +299,14 @@ void configSaved()
   needReset = true;
 }
 
+bool validate_int_range(iotwebconf::WebRequestWrapper* webRequestWrapper, iotwebconf::Parameter &param, int min, int max) {
+  String arg = webRequestWrapper->arg(param.getId());
+  const char * const arg_str = arg.c_str();
+  char *end;
+  const int val = strtol(arg_str, &end, 10);
+  return val >= min && val <= max;
+}
+
 bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
 {
   Serial.println("Validating form.");
@@ -278,6 +316,12 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
   if (l < 3)
   {
     mqttServerParam.errorMessage = "Please provide at least 3 characters!";
+    valid = false;
+  }
+
+  if (!validate_int_range(webRequestWrapper, mqttQoSParam, 0, 2))
+  {
+    mqttQoSParam.errorMessage = "Please provide a valid QoS";
     valid = false;
   }
 
@@ -292,15 +336,17 @@ bool connectMqtt() {
     return false;
   }
   Serial.println("Connecting to MQTT server...");
-  if (!mqttClient.connect(iotWebConf.getThingName())) {
+  if (!mqttClient.connect(iotWebConf.getThingName(),
+                          mqttUserValue[0] ? mqttUserValue : nullptr,
+                          mqttPasswordValue[0] ? mqttPasswordValue : nullptr)) {
     lastMqttConnectionAttempt = now;
     return false;
   }
   Serial.println("Connected!");
 
   mqttClient.subscribe(mqttActionTopic);
-  mqttClient.publish(mqttStatusTopic, state == HIGH ? "ON" : "OFF", true, 1);
-  mqttClient.publish(mqttActionTopic, state == HIGH ? "ON" : "OFF", true, 1);
+  mqttClient.publish(mqttStatusTopic, state == HIGH ? "ON" : "OFF", mqttRetain, mqttQoS);
+  mqttClient.publish(mqttActionTopic, state == HIGH ? "ON" : "OFF", mqttRetain, mqttQoS);
 
   return true;
 }
