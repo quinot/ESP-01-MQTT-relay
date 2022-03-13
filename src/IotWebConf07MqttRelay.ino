@@ -92,6 +92,7 @@ const char wifiInitialApPassword[] = "smrtTHNG8266";
 // -- Ignore/limit status changes more frequent than the value below (milliseconds).
 #define ACTION_FREQ_LIMIT 7000
 #define NO_ACTION -1
+#define FLASH_ACTION -2
 
 // -- Method declarations.
 void handleRoot();
@@ -115,6 +116,8 @@ HTTPUpdateServer httpUpdater;
 WiFiClient net;
 MQTTClient mqttClient;
 
+char rqFlashDurationValue[NUMBER_LEN];
+
 char mqttServerValue[STRING_LEN];
 char mqttUserValue[STRING_LEN];
 char mqttPasswordValue[STRING_LEN];
@@ -125,6 +128,9 @@ static char qosValues[][NUMBER_LEN] = {"0", "1", "2"};
 static char qosNames[][STRING_LEN] = {"0 - At most once", "1 - At least once", "2 - Exactly once"};
 
 IotWebConf iotWebConf(thingName, &dnsServer, &server, wifiInitialApPassword, CONFIG_VERSION);
+
+IotWebConfParameterGroup rqParamGroup = IotWebConfParameterGroup("iwcRQ", "Relay control");
+IotWebConfNumberParameter rqFlashDurationParam = IotWebConfNumberParameter("Flash duration", "rqFlashDuration", rqFlashDurationValue, NUMBER_LEN, "1000");
 
 IotWebConfParameterGroup mqttParamGroup = IotWebConfParameterGroup("iwcMqtt", "MQTT");
 
@@ -139,6 +145,7 @@ bool needReset = false;
 unsigned long lastMqttConnectionAttempt = 0;
 int needAction = NO_ACTION;
 int state = LOW;
+int flashDuration;
 unsigned long lastAction = 0;
 char mqttActionTopic[STRING_LEN];
 char mqttStatusTopic[STRING_LEN];
@@ -159,6 +166,9 @@ void setup()
 #ifdef BUTTON_PIN
   iotWebConf.setConfigPin(BUTTON_PIN);
 #endif
+  iotWebConf.addParameterGroup(&rqParamGroup);
+  rqParamGroup.addItem(&rqFlashDurationParam);
+
   iotWebConf.addParameterGroup(&mqttParamGroup);
   mqttParamGroup.addItem(&mqttServerParam);
   mqttParamGroup.addItem(&mqttUserParam);
@@ -177,6 +187,8 @@ void setup()
   bool validConfig = iotWebConf.init();
   if (!validConfig)
   {
+    rqFlashDurationValue[0] = '\0';
+
     mqttServerValue[0] = '\0';
     mqttUserValue[0] = '\0';
     mqttPasswordValue[0] = '\0';
@@ -184,12 +196,12 @@ void setup()
     mqttQoSValue[0] = '\0';
   }
 
-  // -- Set up required URL handlers on the web server.
-  server.on("/", handleRoot);
-  server.on("/config", []{ iotWebConf.handleConfig(); });
-  server.onNotFound([](){ iotWebConf.handleNotFound(); });
+  // Relay control setup
 
-  // -- Prepare dynamic topic names
+  flashDuration = atoi(rqFlashDurationValue);
+
+  // MQTT setup
+
   String temp = String(MQTT_TOPIC_PREFIX);
   temp += iotWebConf.getThingName();
   temp += "/action";
@@ -204,7 +216,13 @@ void setup()
 
   mqttClient.begin(mqttServerValue, net);
   mqttClient.onMessage(mqttMessageReceived);
-  
+
+  // Web server setup
+
+  server.on("/", handleRoot);
+  server.on("/config", []{ iotWebConf.handleConfig(); });
+  server.onNotFound([](){ iotWebConf.handleNotFound(); });
+
   Serial.println("Ready.");
 }
 
@@ -256,7 +274,13 @@ void loop()
   if ((needAction != NO_ACTION)
     && ( ACTION_FREQ_LIMIT < now - lastAction))
   {
-    state = needAction;
+    if (needAction >= 0)
+      setState(needAction);
+    else if (needAction == FLASH_ACTION) {
+      setState(HIGH);
+      delay(flashDuration);
+      setState(LOW);
+    }
     lastAction = now;
   }
 }
@@ -340,6 +364,11 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
     valid = false;
   }
 
+  if (!validate_int_range(webRequestWrapper, rqFlashDurationParam, 1, INT_MAX))
+  {
+    rqFlashDurationParam.errorMessage = "Flash duration must be a positive integer (ms)";
+    valid = false;
+  }
   return valid;
 }
 
@@ -370,10 +399,20 @@ bool connectMqtt() {
 void mqttMessageReceived(String &topic, String &payload)
 {
   Serial.println("Incoming: " + topic + " - " + payload);
-  
+
   if (topic.endsWith("action"))
   {
-    needAction = payload.equals("ON") ? HIGH : LOW;
+    if (payload.equals("ON"))
+      needAction = HIGH;
+    else if (payload.equals("OFF"))
+      needAction = LOW;
+    else if (payload.equals("TOGGLE"))
+      needAction = 1 - state;
+    else if (payload.equals("FLASH"))
+      needAction = FLASH_ACTION;
+    else if (payload.equals("REPORT"))
+      report();
+
     if (needAction == state)
     {
       needAction = NO_ACTION;
