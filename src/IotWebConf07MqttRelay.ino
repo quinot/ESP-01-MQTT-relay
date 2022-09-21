@@ -72,7 +72,7 @@ const char wifiInitialApPassword[] = "smrtTHNG8266";
 #define CHECKBOX_LEN 9
 
 // -- Configuration specific key. The value should be modified if config structure was changed.
-#define CONFIG_VERSION "mqt4"
+#define CONFIG_VERSION "mqt5"
 
 // -- When BUTTON_PIN is pulled to ground on startup, the Thing will use the initial
 //      password to buld an AP. (E.g. in case of lost password)
@@ -127,12 +127,14 @@ ESP8266HTTPUpdateServer httpUpdater;
 #elif defined(ESP32)
 HTTPUpdateServer httpUpdater;
 #endif
-WiFiClient net;
+WiFiClient *net;
 MQTTClient mqttClient;
 
 char rqFlashDurationValue[NUMBER_LEN];
 
 char mqttServerValue[STRING_LEN];
+char mqttPortValue[NUMBER_LEN];
+char mqttTlsValue[CHECKBOX_LEN];
 char mqttUserValue[STRING_LEN];
 char mqttPasswordValue[STRING_LEN];
 char mqttRetainValue[CHECKBOX_LEN];
@@ -149,6 +151,8 @@ IotWebConfNumberParameter rqFlashDurationParam = IotWebConfNumberParameter("Flas
 IotWebConfParameterGroup mqttParamGroup = IotWebConfParameterGroup("iwcMqtt", "MQTT");
 
 IotWebConfTextParameter mqttServerParam = IotWebConfTextParameter("Server", "mqttServer", mqttServerValue, STRING_LEN);
+IotWebConfNumberParameter mqttPortParam = IotWebConfNumberParameter("Port", "mqttPort", mqttPortValue, NUMBER_LEN, "1883");
+IotWebConfCheckboxParameter mqttTlsParam = IotWebConfCheckboxParameter("Use TLS", "mqttTls", mqttTlsValue, CHECKBOX_LEN, false);
 IotWebConfTextParameter mqttUserParam = IotWebConfTextParameter("User", "mqttUser", mqttUserValue, STRING_LEN);
 IotWebConfPasswordParameter mqttPasswordParam = IotWebConfPasswordParameter("Password", "mqttPassword", mqttPasswordValue, STRING_LEN);
 IotWebConfCheckboxParameter mqttRetainParam = IotWebConfCheckboxParameter("Retain", "mqttRetain", mqttRetainValue, CHECKBOX_LEN, true);
@@ -163,6 +167,8 @@ int flashDuration;
 unsigned long lastAction = 0;
 char mqttActionTopic[STRING_LEN];
 char mqttStatusTopic[STRING_LEN];
+bool mqttTls;
+int mqttPort;
 bool mqttRetain;
 int mqttQoS;
 
@@ -185,6 +191,8 @@ void setup()
 
   iotWebConf.addParameterGroup(&mqttParamGroup);
   mqttParamGroup.addItem(&mqttServerParam);
+  mqttParamGroup.addItem(&mqttPortParam);
+  mqttParamGroup.addItem(&mqttTlsParam);
   mqttParamGroup.addItem(&mqttUserParam);
   mqttParamGroup.addItem(&mqttPasswordParam);
   mqttParamGroup.addItem(&mqttRetainParam);
@@ -207,6 +215,8 @@ void setup()
     rqFlashDurationValue[0] = '\0';
 
     mqttServerValue[0] = '\0';
+    mqttPortValue[0] = '\0';
+    mqttTlsValue[0] = '\0';
     mqttUserValue[0] = '\0';
     mqttPasswordValue[0] = '\0';
     mqttRetainValue[0] = '\0';
@@ -228,10 +238,21 @@ void setup()
   temp += "/status";
   temp.toCharArray(mqttStatusTopic, STRING_LEN);
 
+  mqttPort = atoi(mqttPortValue);
+  mqttTls = !strcmp(mqttTlsValue, "selected");
   mqttRetain = !strcmp(mqttRetainValue, "selected");
   mqttQoS = atoi(mqttQoSValue);
 
-  mqttClient.begin(mqttServerValue, net);
+  if (mqttTls) {
+    net = new WiFiClientSecure;
+
+    // No server cert check
+    ((WiFiClientSecure *)net)->setInsecure();
+
+  } else {
+    net = new WiFiClient;
+  }
+  mqttClient.begin(mqttServerValue, mqttPort, *net);
   mqttClient.onMessage(mqttMessageReceived);
 
   // Web server setup
@@ -390,25 +411,33 @@ bool formValidator(iotwebconf::WebRequestWrapper* webRequestWrapper)
 }
 
 bool connectMqtt() {
-  char helloBuf[STRING_LEN];
+  char buf[STRING_LEN];
 
   if (!mqttClient.connect(iotWebConf.getThingName(),
                           mqttUserValue[0] ? mqttUserValue : nullptr,
                           mqttPasswordValue[0] ? mqttPasswordValue : nullptr))
   {
+    Serial.println("Connection failed");
+    Serial.print("Client status: ");
+    Serial.println(net->status());
+    if (mqttTls) {
+      ((WiFiClientSecure *)net)->getLastSSLError(buf, sizeof buf);
+      Serial.print("SSL error: ");
+      Serial.println(buf);
+    }
     return false;
   }
   Serial.println("Connected!");
   mqttClient.subscribe(mqttActionTopic);
   snprintf(
-    helloBuf, sizeof(helloBuf),
+    buf, sizeof buf,
     "HELLO ip=%s flash=%d QoS=%d retain=%s",
     WiFi.localIP().toString().c_str(),
     flashDuration,
     mqttQoS,
     mqttRetain ? "true": "false"
   );
-  mqttClient.publish(mqttStatusTopic, helloBuf);
+  mqttClient.publish(mqttStatusTopic, buf);
   report();
   return true;
 }
