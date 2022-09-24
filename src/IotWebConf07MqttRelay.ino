@@ -100,7 +100,7 @@ const char wifiInitialApPassword[] = "smrtTHNG8266";
 # define RELAY_PIN D5
 #endif
 
-#define MQTT_TOPIC_PREFIX "/devices/"
+#define MQTT_TOPIC_PREFIX "devices/"
 #define MQTT_CONNECT_FREQ_LIMIT 2000
 
 // -- Ignore/limit status changes more frequent than the value below (milliseconds).
