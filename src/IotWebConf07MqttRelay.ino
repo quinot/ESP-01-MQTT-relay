@@ -21,12 +21,15 @@
  *
  *   This example starts an MQTT client with the configured
  *   connection settings.
- *   Will receives messages appears in channel "/devices/[thingName]/action"
+ *   Will receives messages appears in channel "devices/[thingName]/action"
  *   with payload ON/OFF, and reports current state in channel
- *   "/devices/[thingName]/status" (ON/OFF). Where the thingName can be
+ *   "devices/[thingName]/status" (ON/OFF). Where the thingName can be
  *   configured in the portal. A relay will be switched on/off
  *   corresponding to the received action. The relay can be also controlled
  *   by the push button.
+ *   Payload TOGGLE inverts the state.
+ *   Payload FLASH siwtches ON then OFF after a configurable delay.
+ *   Payload REPORT triggers a report of the current state without change.
  *   The thing will delay actions arriving within 7 seconds.
  *
  *   This example also provides the firmware update option.
