@@ -28,7 +28,7 @@
  *   corresponding to the received action. The relay can be also controlled
  *   by the push button.
  *   Payload TOGGLE inverts the state.
- *   Payload FLASH siwtches ON then OFF after a configurable delay.
+ *   Payload FLASH switches ON then OFF after a configurable delay.
  *   Payload REPORT triggers a report of the current state without change.
  *   The thing will delay actions arriving within 7 seconds.
  *
